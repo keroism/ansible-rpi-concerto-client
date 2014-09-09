@@ -1,0 +1,21 @@
+---
+
+screen_id: ""
+concerto_server_frontend: "http://dev-signage.manhattan.edu/frontend"
+concerto_server_version: 2
+
+timezone: "America/New_York"
+pi_user: pi
+ga_code: UA-XXXXXXXX-X
+hostname: 'rpis-{{ ansible_eth0.macaddress |replace(":", "") }}'
+#hostname: '{{ansible_hostname}}'
+
+wifissid: "JASPERNET" # Todo: config for secured wifi
+cpuspeed: 700
+hdmi_force_hotplug: 0
+
+autoscreen_turn_on_off: 1 # 0 Don't blank, 1 Blank screen at time to help prevent burn in
+autoscreen_turn_off_hour: 4
+autoscreen_turn_off_minute: 15
+autoscreen_turn_on_hour: 6
+autoscreen_turn_on_minute: 15

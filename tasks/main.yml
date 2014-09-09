@@ -1,0 +1,123 @@
+---
+- name: General | Install super useful things to have
+  apt: name={{ item }} state=present
+  tags: common
+  with_items:
+    - wget
+    - git 
+    - unzip
+    - curl
+    - mlocate
+    - ntpdate
+    - python-netifaces
+    - iotop
+
+- name: Signage | Install
+  apt: name={{ item }} state=present
+  tags: common
+  with_items:
+    - x11-xserver-utils
+    - unclutter
+
+- name: Signage | Install fonts
+  apt: name=ttf-mscorefonts-installer state=present
+  tags: common
+
+- name: remove swapfile software
+  apt: name=dphys-swapfile state=absent
+
+- name: Signage | Copy scripts (as pi)
+  template: src=scripts/{{ item.name }} dest=/home/{{pi_user}}/{{item.dest}} owner={{pi_user}} group={{pi_user}} mode=770
+  with_items:
+    - {name: 'screenoff.sh', dest: 'screenoff.sh' }
+    - {name: 'screenon.sh', dest: 'screenon.sh' }
+    - {name: 'digitalsignage.sh', dest: 'digitalsignage.sh' }
+    - {name: 'phonehome.py', dest: 'phonehome.py' }
+  tags: [settings, scripts]
+  notify: delayed reboot
+
+- name: create pi LXDE dir
+  file: path='/home/{{pi_user}}/.config/pcmanfm/LXDE/' state=directory owner={{pi_user}} group={{pi_user}} 
+
+- name: Signage | Copy conf (as pi)
+  template: src={{ item.name }} dest=/home/{{pi_user}}/{{item.dest}} owner={{pi_user}} group={{pi_user}} mode=600
+  with_items:
+    - {name: 'home_pi_signage.conf', dest: 'signage.conf' }
+    - {name: 'home_pi_.config_pcmanfm_LXDE_pcmanfm.conf', dest: '.config/pcmanfm/LXDE/pcmanfm.conf' }
+    - {name: 'home_pi_.bashrc', dest: '.bashrc' }
+  tags: [settings, scripts]
+  notify: delayed reboot
+
+- name: Signage | Copy root stuff
+  template: src={{ item.name }} dest={{item.dest}}
+  with_items:
+    - {name: 'boot_config.txt.j2', dest: '/boot/config.txt' }
+    - {name: 'etc_network_interfaces.j2', dest: '/etc/network/interfaces' }
+    - {name: 'etc_wpa_supplicant_wpa_supplicant.conf.j2', dest: '/etc/wpa_supplicant/wpa_supplicant.conf' }
+    - {name: 'etc_inittab', dest: '/etc/inittab' }
+    - {name: 'etc_dhcp_dhclient.conf', dest: '/etc/dhcp/dhclient.conf' }
+    - {name: 'etc_hosts', dest: '/etc/hosts' }
+  tags: settings
+  notify: delayed reboot
+
+- name: Update Timezone
+  template: src=etc_timezone.j2 dest='/etc/timezone'
+  notify:
+    - update timezone
+  tags: settings
+
+- name: Set hostname 
+  hostname: name={{hostname}}
+  tags: [settings]
+  notify: delayed reboot
+
+- name: add turn off cron scripts
+  cron: name="turnOffScreen" hour="{{autoscreen_turn_off_hour}}" minute="{{autoscreen_turn_off_minute}}" job="/home/{{pi_user}}/screenoff.sh"
+  when: autoscreen_turn_on_off
+  tags: cron
+
+- name: add turn on cron scripts
+  cron: name="turnOnScreen" hour="{{autoscreen_turn_on_hour}}" minute="{{autoscreen_turn_on_minute}}" job="/home/{{pi_user}}/screenon.sh"
+  when: autoscreen_turn_on_off
+  tags: cron
+
+- name: remove on/off cron if needed
+  cron: name={{item}} state=absent
+  with_items: ['turnOffScreen', 'turnOnScreen'] 
+  when: not autoscreen_turn_on_off 
+  tags: cron
+
+- cron: name="reboot" hour="3" minute="14" job="/sbin/reboot"
+  tags: cron
+
+- cron: name="startScreen" user={{pi_user}} job='export DISPLAY=:0 && /bin/bash /home/{{pi_user}}/digitalsignage.sh'
+  tags: cron
+
+- name: Add phonehome script
+  cron: name="phonehome" minute="*/14" user={{pi_user}}  job='/home/{{pi_user}}/phonehome.py'
+  tags: cron
+
+- name: Add phonehome script (at boot)
+  cron: name="phonehome_reboot" special_time="reboot" user={{pi_user}}  job='/home/{{pi_user}}/phonehome.py'
+  tags: cron
+  notify: delayed reboot
+
+- name: Signage | Fail2ban
+  apt: name=fail2ban state=present
+
+- name: Start fail2ban
+  service: name=fail2ban state=started enabled=yes
+
+- name: modprobe watchdog
+  modprobe: name=bcm2708_wdog state=present
+
+- lineinfile: dest=/etc/modules line="bcm2708_wdog"
+
+- name: Signage | watchdog
+  apt: name=watchdog state=present  
+
+- name: Copy watchdog config
+  template: src=etc_watchdog.conf dest=/etc/watchdog.conf
+
+- name: Start watchdog
+  service: name=watchdog state=started enabled=yes
